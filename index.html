@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Witch & Magic Pea - The English Game</title>
+    <!-- Import Font ngộ nghĩnh cho trẻ em -->
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Thư viện PeerJS để chạy WebRTC -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <!-- Nhạc nền và hiệu ứng âm thanh (Audio Web API) -->
+    <!-- Dùng một bản nhạc online vui nhộn thay vì bản INTRO MUSIC.m4a ban đầu -->
+    <audio id="bgm" src="https://cdn.pixabay.com/download/audio/2022/10/25/audio_49635b2e9c.mp3?filename=fun-life-112188.mp3" loop></audio>
+    <audio id="sfx-correct" src="assets/CORRECT.m4a"></audio>
+    <audio id="sfx-wrong" src="assets/WRONG.m4a"></audio>
+    <audio id="sfx-jump" src="assets/JUMP.m4a"></audio>
+    <audio id="sfx-drop" src="assets/KEO DROPPING.m4a"></audio>
+    <audio id="sfx-dog" src="assets/DOG BARKING.m4a"></audio>
+    <audio id="sfx-laugh" src="assets/PEA_LAUGHING.m4a"></audio>
+
+    <div id="app-container">
+        <!-- 1. MÀN HÌNH CHỌN VAI TRÒ -->
+        <div id="screen-home" class="screen active fade-in">
+            <img src="assets/logo.png" alt="Logo" class="main-logo">
+            <h1 class="game-title">Witch & Magic Pea</h1>
+            <p class="subtitle">Ôn tập Thì Quá Khứ Đơn (Simple Past)</p>
+            <div class="role-buttons">
+                <button id="btn-create-room" class="btn btn-primary">TẠO PHÒNG (GIÁO VIÊN)</button>
+                <button id="btn-join-room-ui" class="btn btn-secondary">VÀO PHÒNG (HỌC SINH)</button>
+            </div>
+        </div>
+
+        <!-- 2. MÀN HÌNH GIÁO VIÊN: LOBBY -->
+        <div id="screen-teacher-lobby" class="screen hidden">
+            <h2>PHÒNG CỦA GIÁO VIÊN</h2>
+            <div class="room-code-display">
+                MÃ PHÒNG: <span id="display-room-code">ĐANG TẠO...</span>
+            </div>
+            <p>Chiếu mã này lên màn hình lớn để học sinh tham gia!</p>
+            <div class="lobby-list">
+                <h3>Sĩ số: <span id="teacher-student-count">0</span></h3>
+                <ul id="teacher-student-list"></ul>
+            </div>
+            <button id="btn-start-game" class="btn btn-primary" disabled>BẮT ĐẦU CHƠI</button>
+        </div>
+
+        <!-- 3. MÀN HÌNH HỌC SINH: NHẬP MÃ -->
+        <div id="screen-student-join" class="screen hidden">
+            <h2>THAM GIA LỚP HỌC</h2>
+            <input type="text" id="input-room-code" placeholder="Mã phòng (6 ký tự)" maxlength="6">
+            <input type="text" id="input-student-name" placeholder="Tên của em (VD: Lan, Nam)">
+            <button id="btn-join-room" class="btn btn-primary">VÀO CHƠI!</button>
+            <button id="btn-back-home" class="btn btn-secondary" style="margin-top:10px; font-size:1rem;" onclick="window.location.reload()">Quay lại</button>
+            <p id="join-error-msg" class="error-text"></p>
+        </div>
+
+        <!-- 4. MÀN HÌNH HỌC SINH: WAITING -->
+        <div id="screen-student-waiting" class="screen hidden">
+            <h2>ĐANG CHỜ CÔ/THẦY GIÁO BẮT ĐẦU...</h2>
+            <div class="loader"></div>
+            <div class="lobby-list">
+                <h3>Các bạn đang ở trong phòng:</h3>
+                <ul id="student-waiting-list"></ul>
+            </div>
+        </div>
+
+        <!-- 5. MÀN HÌNH CHƠI GAME -->
+        <div id="screen-game" class="screen hidden">
+            <!-- Khu vực đồ họa 2D chung -->
+            <div class="game-scene">
+                <img src="assets/Background.png" class="asset-bg">
+                <img src="assets/logo.png" class="asset-logo">
+                <img src="assets/witch.png" class="asset-witch" id="sprite-witch">
+                <img src="assets/basket.png" class="asset-basket">
+                <img src="assets/pea_idle.png" class="asset-pea" id="sprite-pea">
+                <img src="assets/chasing dog.png" class="asset-dog hidden" id="sprite-dog">
+                <img src="assets/CANDY 1.png" class="asset-candy hidden" id="sprite-candy">
+            </div>
+
+            <!-- UI dành cho Học sinh: Bảng câu hỏi -->
+            <div id="student-quiz-ui" class="quiz-panel hidden">
+                <h3 id="quiz-question">Câu hỏi sẽ hiện ở đây?</h3>
+                <div class="quiz-options" id="quiz-options-container">
+                    <!-- Các nút đáp án sẽ render bằng JS -->
+                </div>
+            </div>
+
+            <!-- UI Leaderboard bên phải màn hình -->
+            <div id="leaderboard-panel" class="leaderboard-panel">
+                <h3>🏆 BẢNG XẾP HẠNG</h3>
+                <ul id="live-leaderboard-list"></ul>
+                <!-- Nút kết thúc chỉ hiện cho Giáo viên -->
+                <button id="btn-end-game" class="btn btn-danger hidden">KẾT THÚC & TRAO GIẢI</button>
+            </div>
+            
+            <!-- Màn chờ cho HS khi làm xong trước bạn khác -->
+            <div id="student-finished-overlay" class="overlay hidden">
+                <h2>Đã làm xong!</h2>
+                <p>Hãy chờ các bạn khác và xem bảng xếp hạng nhé.</p>
+            </div>
+        </div>
+
+        <!-- 6. MÀN HÌNH PODIUM (TỔNG KẾT) -->
+        <div id="screen-podium" class="screen hidden">
+            <h1 class="congrats-title">🎉 CHÚC MỪNG 🎉</h1>
+            <div class="podium-container">
+                <div class="podium-place second">
+                    <div class="avatar">🥈</div>
+                    <div class="name" id="podium-name-2">---</div>
+                    <div class="score" id="podium-score-2">0</div>
+                    <div class="block">2</div>
+                </div>
+                <div class="podium-place first">
+                    <div class="avatar">🥇</div>
+                    <div class="name" id="podium-name-1">---</div>
+                    <div class="score" id="podium-score-1">0</div>
+                    <div class="block">1</div>
+                </div>
+                <div class="podium-place third">
+                    <div class="avatar">🥉</div>
+                    <div class="name" id="podium-name-3">---</div>
+                    <div class="score" id="podium-score-3">0</div>
+                    <div class="block">3</div>
+                </div>
+            </div>
+            <div class="other-ranks">
+                <h3>Các thứ hạng khác</h3>
+                <ul id="final-ranks-list"></ul>
+            </div>
+            <button class="btn btn-primary" onclick="window.location.reload()">Chơi lại từ đầu</button>
+        </div>
+
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
